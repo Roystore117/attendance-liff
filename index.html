@@ -65,8 +65,9 @@
         </form>
 
         <!-- 申請ボタン -->
-        <button type="submit" form="absenceForm" id="submitBtn" class="btn w-100 p-4 fw-bold text-white" style="background-color: #06C755; border: none; font-size: 1.1rem; border-radius: 12px;">
-            申請する
+        <button type="submit" form="absenceForm" id="submitBtn" class="btn w-100 p-4 fw-bold text-white d-flex align-items-center justify-content-center gap-2" style="background-color: #06C755; border: none; font-size: 1.1rem; border-radius: 12px;">
+            <span id="submitText">申請する</span>
+            <span id="submitSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
         </button>
     </div>
 
@@ -123,6 +124,11 @@
                 (formData.details ? `連絡事項: ${formData.details}` : '');
 
             try {
+                // ボタンをローディング状態に
+                submitBtn.disabled = true;
+                document.getElementById('submitText').textContent = '送信中...';
+                document.getElementById('submitSpinner').classList.remove('d-none');
+
                 // LINEメッセージ送信とGAS送信を並行実行
                 const [lineResult, gasResult] = await Promise.allSettled([
                     // LINEメッセージ送信
@@ -159,9 +165,14 @@
                 }
                 
                 alert("送信しました！");
-                //liff.closeWindow();
+                liff.closeWindow();
             } catch (err) {
                 alert("エラー: " + err);
+            } finally {
+                // 閉じなかった場合に備えてボタン状態を戻す
+                submitBtn.disabled = false;
+                document.getElementById('submitText').textContent = '申請する';
+                document.getElementById('submitSpinner').classList.add('d-none');
             }
         });
     </script>
