@@ -12,10 +12,15 @@
         <h3 class="text-center mb-4 pt-3">欠勤連絡システム2_V02</h3>
         
         <form id="absenceForm" class="bg-white rounded-3 shadow-sm p-4 mb-4">
-            <!-- 名前 -->
+            <!-- 名前（選択式） -->
             <div class="mb-4">
                 <label for="name" class="form-label fw-bold mb-2">名前 <span class="text-danger">*</span></label>
-                <input type="text" class="form-control form-control-lg" id="name" name="name" required placeholder="氏名を入力してください">
+                <select class="form-select form-select-lg" id="name" name="name" required>
+                    <option value="">選択してください</option>
+                    <option value="大野政徳">大野政徳</option>
+                    <option value="今井涼">今井涼</option>
+                    <option value="谷口友里恵">谷口友里恵</option>
+                </select>
             </div>
 
             <!-- 欠勤日付 -->
@@ -52,10 +57,10 @@
                 </select>
             </div>
 
-            <!-- 詳細理由 -->
+            <!-- 連絡事項 -->
             <div class="mb-4">
-                <label for="details" class="form-label fw-bold mb-2">詳細理由</label>
-                <textarea class="form-control" id="details" name="details" rows="5" placeholder="詳細な理由を入力してください（任意）"></textarea>
+                <label for="details" class="form-label fw-bold mb-2">連絡事項</label>
+                <textarea class="form-control" id="details" name="details" rows="5" placeholder="伝えておきたい連絡事項があれば入力してください（任意）"></textarea>
             </div>
         </form>
 
@@ -68,18 +73,35 @@
     <script>
         // ▼▼▼ ここに自分のLIFF IDを入れる ▼▼▼
         const MY_LIFF_ID = "2008863832-Z1XJ08ea"; 
+        const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx0xYp5WCATnJ8KSh6AM4x1OsOdefn2h4171SRK1noqk0RCzY0p3nYP4CHsV5o43ame/exec";
 
         // 初期化
-        liff.init({ liffId: MY_LIFF_ID }).then(() => {
-            if (!liff.isLoggedIn()) {
-                //★デバッグ用コメントアウト
-                liff.login();
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.classList.add('disabled');
+
+        async function initLiff() {
+            try {
+                await liff.init({ liffId: MY_LIFF_ID });
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('disabled');
+            } catch (e) {
+                console.error("LIFF init error:", e);
+                alert("LIFFの初期化に失敗しました。LIFFのエンドポイントURL設定と、HTTPS配信を確認してください。");
             }
-        });
+        }
+        initLiff();
 
         // フォーム送信処理
         document.getElementById('absenceForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // 未ログインなら先にログイン（access_tokenが無いとsendMessagesできない）
+            if (!liff.isLoggedIn()) {
+                // LINEアプリ内で起動していることが前提
+                liff.login({ redirectUri: window.location.href });
+                return;
+            }
             
             // フォームデータを取得
             const formData = {
@@ -95,19 +117,47 @@
             const messageText = `【欠勤届】\n\n` +
                 `名前: ${formData.name}\n` +
                 `欠勤日付: ${formData.absenceDate}\n` +
-                `復帰日付: ${formData.returnDate}\n` +
+                `復帰予定日: ${formData.returnDate}\n` +
                 `欠勤理由: ${formData.reason}\n` +
                 `有給利用: ${formData.paidLeave}\n` +
-                (formData.details ? `詳細理由: ${formData.details}` : '');
+                (formData.details ? `連絡事項: ${formData.details}` : '');
 
             try {
-                await liff.sendMessages([{
-                    type: 'text',
-                    text: messageText
-                }]);
+                // LINEメッセージ送信とGAS送信を並行実行
+                const [lineResult, gasResult] = await Promise.allSettled([
+                    // LINEメッセージ送信
+                    liff.sendMessages([{
+                        type: 'text',
+                        text: messageText
+                    }]),
+                    // GASへデータを送信
+                    // CORS回避のため、プリフライトが発生しない "application/x-www-form-urlencoded" 形式で送る
+                    // かつ、レスポンスが読めなくても送信自体は通るように no-cors を使用
+                    fetch(GAS_WEBAPP_URL, {
+                        method: "POST",
+                        mode: "no-cors",
+                        body: new URLSearchParams({
+                            ...formData,
+                            submittedAt: new Date().toISOString()
+                        })
+                    })
+                ]);
+
+                // エラーチェック
+                if (lineResult.status === 'rejected') {
+                    console.error("LINE送信エラー:", lineResult.reason);
+                }
+                if (gasResult.status === 'rejected') {
+                    console.error("GAS送信エラー:", gasResult.reason);
+                }
+
+                // GAS送信の結果をログに出力
+                if (gasResult.status === 'fulfilled') {
+                    console.log("GAS送信成功");
+                }
                 
                 alert("送信しました！");
-                liff.closeWindow();
+                //liff.closeWindow();
             } catch (err) {
                 alert("エラー: " + err);
             }
