@@ -131,12 +131,14 @@
                         text: messageText
                     }]),
                     // GASへデータを送信
-                    // CORS回避のため、プリフライトが発生しない "application/x-www-form-urlencoded" 形式で送る
-                    // かつ、レスポンスが読めなくても送信自体は通るように no-cors を使用
+                    // CORS回避のため no-cors + text/plain でJSONを送る
                     fetch(GAS_WEBAPP_URL, {
                         method: "POST",
                         mode: "no-cors",
-                        body: new URLSearchParams({
+                        headers: {
+                            "Content-Type": "text/plain" // プリフライトを避けつつJSONを送る
+                        },
+                        body: JSON.stringify({
                             ...formData,
                             submittedAt: new Date().toISOString()
                         })
